@@ -11,3 +11,8 @@
 *.lai
 *.la
 *.a
+
+# virtual disk files
+*.config
+*.data
+*.bitmap
