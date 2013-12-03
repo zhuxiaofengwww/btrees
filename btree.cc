@@ -356,12 +356,17 @@ ERROR_T BTreeIndex::Lookup(const KEY_T &key, VALUE_T &value)
 
 ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 {
-  return InsertLookup(superblock.info.rootnode, key, value);
+  BTreeNode *newnode=NULL;
+  KEY_T *newkey=NULL;
+  return InsertRecursion(superblock.info.rootnode, key, value, newkey, newnode);
 }
 
-ERROR_T BTreeIndex::InsertLookup(const SIZE_T &node, const KEY_T &key, const VALUE_T &value)
+ERROR_T BTreeIndex::InsertRecursion(const BTreeNode &node, const KEY_T &key, const VALUE_T &value, KEY_T &newkey, BTreeNode &newnode)
 {
   // first do lookup to find the leaf node we need to insert into
+  // insert and split if necessary, return pointer to newnode if splitting
+  // after recursive call returns, fix up pointers if there was a new node
+
   BTreeNode b;
   ERROR_T rc;
   SIZE_T offset;
@@ -383,19 +388,29 @@ ERROR_T BTreeIndex::InsertLookup(const SIZE_T &node, const KEY_T &key, const VAL
       rc=b.GetKey(offset,testkey);
       if (rc) {  return rc; }
       if (key<testkey || key==testkey) {
-	// OK, so we now have the first key that's larger
-	// so we ned to recurse on the ptr immediately previous to 
-	// this one, if it exists
-	rc=b.GetPtr(offset,ptr);
-	if (rc) { return rc; }
-	return InsertLookup(ptr,op,key,value);
+	    // OK, so we now have the first key that's larger
+	    // so we ned to recurse on the ptr immediately previous to 
+	    // this one, if it exists
+	    rc=b.GetPtr(offset,ptr);
+	    if (rc) { return rc; }
+	    rc=InsertRecursion(ptr,key,value,newkey,newnode);
+        if (rc) { return rc; }
+        if (newnode) {
+          // fix up pointers for this interior node
+        }
+        // if now too full, split and return the new node
       }
     }
     // if we got here, we need to go to the next pointer, if it exists
     if (b.info.numkeys>0) { 
       rc=b.GetPtr(b.info.numkeys,ptr);
       if (rc) { return rc; }
-      return InsertLookup(ptr,op,key,value);
+      return InsertRecursion(ptr,key,value,newkey,newnode);
+      if (rc) { return rc; }
+      if (newnode) {
+          // fix up pointers for this interior node
+      }
+      // if now too full, split and return the new node
     } else {
       // There are no keys at all on this node, so nowhere to go
       return ERROR_NONEXISTENT;
@@ -409,8 +424,8 @@ ERROR_T BTreeIndex::InsertLookup(const SIZE_T &node, const KEY_T &key, const VAL
       rc=b.GetKey(offset,testkey);
       if (rc) {  return rc; }
       if (testkey==key) { 
-	    return ERROR_CONFLICT
-      } else if (testkey > key) {
+	    return ERROR_CONFLICT;
+      } else if (key<testkey) {
           // the key we found is larger than the key we want to insert
           // we need to insert our key at this offset
          
@@ -423,7 +438,7 @@ ERROR_T BTreeIndex::InsertLookup(const SIZE_T &node, const KEY_T &key, const VAL
           if (rc) { return rc; }
 
           // iterate through and move all keys and values over by one
-          for (i=offset;i<b.info.numkeys;i++) {
+          for (SIZE_T i=offset;i<b.info.numkeys;i++) {
             rc=b.SetKey(i,tempKeyPrev);
             if (rc) { return rc; }
             rc=b.SetVal(i,tempValuePrev);
@@ -447,9 +462,9 @@ ERROR_T BTreeIndex::InsertLookup(const SIZE_T &node, const KEY_T &key, const VAL
           if (rc) { return rc; }
           rc=b.Serialize(buffercache,node);
           if (rc) { return rc; }
-          // if the node is now too big, split using recursion
-          //return InsertRecursion();
-          return 0;
+          // if the node is now too big, split using recursion and return the new node
+          // otherwise just return 0
+          return ERROR_NOERROR;
       }
     }
     // there is no key larger than the new key
@@ -466,8 +481,8 @@ ERROR_T BTreeIndex::InsertLookup(const SIZE_T &node, const KEY_T &key, const VAL
     rc=b.Serialize(buffercache,node);
     if (rc) { return rc; }
 
-    // if the node is too big, split using recursion
-    //
+    // if the node is too big, split using recursion, then return the new node
+    return ERROR_NOERROR;
     break;
   default:
     // We can't be looking at anything other than a root, internal, or leaf
@@ -486,7 +501,7 @@ ERROR_T BTreeIndex::InsertRecursion(const BTreeNode &node, const KEY_T &key, con
 ERROR_T BTreeIndex::Update(const KEY_T &key, const VALUE_T &value)
 {
   // WRITE ME
-  return LookupOrUpdateInternal(superblock.info.rootnode, BTREE_OP_UPDATE, key, value);
+  return LookupOrUpdateInternal(superblock.info.rootnode, BTREE_OP_UPDATE, key, (VALUE_T&)value);
 }
 
   
