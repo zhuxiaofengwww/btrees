@@ -108,7 +108,7 @@ public:
 
   // return zero on on success
   // return ERROR_NOSPACE if you run out of disk space 
-  ERROR_T InsertRecursion(const BTreeNode &node, const KEY_T &key, const VALUE_T &value, KEY_T &newkey, BTreeNode &newnode);  
+  ERROR_T InsertRecursion(const BTreeNode &node, const KEY_T &key, const VALUE_T &value, KEY_T *newkey, BTreeNode *newnode);  
 
   // return zero on success
   // return ERROR_NONEXISTENT  if the key doesn't exist
@@ -124,10 +124,6 @@ public:
   // return ERROR_NONEXISTENT  if the key doesn't exist
   ERROR_T Lookup(const KEY_T &key, VALUE_T &value);
  
-
-  // return zero on success
-  ERROR_T InsertLookup(const SIZE_T &node, const KEY_T &key, const VALUE_T &value);
-
   // Here you should figure out if your index makes sense
   // Is it a tree?  Is it in order?  Is it balanced?  Does each node have
   // a valid use ratio?

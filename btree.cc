@@ -361,7 +361,7 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
   return InsertRecursion(superblock.info.rootnode, key, value, newkey, newnode);
 }
 
-ERROR_T BTreeIndex::InsertRecursion(const BTreeNode &node, const KEY_T &key, const VALUE_T &value, KEY_T &newkey, BTreeNode &newnode)
+ERROR_T BTreeIndex::InsertRecursion(const BTreeNode &node, const KEY_T &key, const VALUE_T &value, KEY_T *newkey, BTreeNode *newnode)
 {
   // first do lookup to find the leaf node we need to insert into
   // insert and split if necessary, return pointer to newnode if splitting
@@ -493,11 +493,6 @@ ERROR_T BTreeIndex::InsertRecursion(const BTreeNode &node, const KEY_T &key, con
   return ERROR_INSANE;
 }
 
-ERROR_T BTreeIndex::InsertRecursion(const BTreeNode &node, const KEY_T &key, const VALUE_T &value, KEY_T &newkey, BTreeNode &newnode)
-{
-  return ERROR_INSANE;    
-}
-  
 ERROR_T BTreeIndex::Update(const KEY_T &key, const VALUE_T &value)
 {
   // WRITE ME
