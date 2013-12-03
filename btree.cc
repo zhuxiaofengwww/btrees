@@ -356,7 +356,7 @@ ERROR_T BTreeIndex::Lookup(const KEY_T &key, VALUE_T &value)
 
 ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 {
-  // WRITE ME
+  // first do lookup to find the leaf node we need to insert into
   BTreeNode b;
   ERROR_T rc;
   SIZE_T offset;
@@ -397,17 +397,23 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
     }
     break;
   case BTREE_LEAF_NODE:
-    // Scan through keys looking for matching value
+    // Scan through keys
+    // if we find a matching key, return ERROR_CONFLICT
+    // if we find a key that is larger, begin insert process
     for (offset=0;offset<b.info.numkeys;offset++) { 
       rc=b.GetKey(offset,testkey);
       if (rc) {  return rc; }
       if (testkey==key) { 
-	    if (op==BTREE_OP_LOOKUP) { 
-	        return b.GetVal(offset,value);
-	    } else { 
-	        // BTREE_OP_UPDATE
-	        return b.SetVal(offset,value);
-	    }
+	    return ERROR_CONFLICT
+      } else if (testkey > key) {
+          // the key we found is larger than the key we want to insert
+          // we need to insert our key at this offset
+          KEY_T tempKeyCurrent;
+          KEY_T tempKeyNext;
+          VALUE_T tempValueCurrent;
+          VALUE_T tempValueNext;
+
+          return InsertRecursion();
       }
     }
     return ERROR_NONEXISTENT;
@@ -421,6 +427,9 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
   return ERROR_INSANE;
 }
 
+ERROR_T BTreeIndex::InsertRecursion(const &node, const &key, const &value, &newkey, &newnode)
+{
+    
 }
   
 ERROR_T BTreeIndex::Update(const KEY_T &key, const VALUE_T &value)
