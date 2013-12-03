@@ -123,6 +123,10 @@ public:
   // return zero on success
   // return ERROR_NONEXISTENT  if the key doesn't exist
   ERROR_T Lookup(const KEY_T &key, VALUE_T &value);
+ 
+
+  // return zero on success
+  ERROR_T InsertLookup(const SIZE_T &node, const KEY_T &key, const VALUE_T &value);
 
   // Here you should figure out if your index makes sense
   // Is it a tree?  Is it in order?  Is it balanced?  Does each node have
