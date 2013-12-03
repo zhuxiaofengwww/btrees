@@ -239,7 +239,8 @@ ERROR_T BTreeIndex::LookupOrUpdateInternal(const SIZE_T &node,
 	        return b.GetVal(offset,value);
 	    } else { 
 	        // BTREE_OP_UPDATE
-	        return b.SetVal(offset,value);
+	        b.SetVal(offset,value);
+            return b.Serialize(buffercache,node);
 	    }
       }
     }
