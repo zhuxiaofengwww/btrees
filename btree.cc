@@ -356,6 +356,11 @@ ERROR_T BTreeIndex::Lookup(const KEY_T &key, VALUE_T &value)
 
 ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 {
+  return InsertLookup(superblock.info.rootnode, key, value);
+}
+
+ERROR_T BTreeIndex::InsertLookup(const SIZE_T &node, const KEY_T &key, const VALUE_T &value)
+{
   // first do lookup to find the leaf node we need to insert into
   BTreeNode b;
   ERROR_T rc;
@@ -383,14 +388,14 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 	// this one, if it exists
 	rc=b.GetPtr(offset,ptr);
 	if (rc) { return rc; }
-	return LookupOrUpdateInternal(ptr,op,key,value);
+	return InsertLookup(ptr,op,key,value);
       }
     }
     // if we got here, we need to go to the next pointer, if it exists
     if (b.info.numkeys>0) { 
       rc=b.GetPtr(b.info.numkeys,ptr);
       if (rc) { return rc; }
-      return LookupOrUpdateInternal(ptr,op,key,value);
+      return InsertLookup(ptr,op,key,value);
     } else {
       // There are no keys at all on this node, so nowhere to go
       return ERROR_NONEXISTENT;
@@ -408,15 +413,61 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
       } else if (testkey > key) {
           // the key we found is larger than the key we want to insert
           // we need to insert our key at this offset
-          KEY_T tempKeyCurrent;
-          KEY_T tempKeyNext;
+         
+          // initialize temporary key and value variables
+          KEY_T tempKeyPrev=key; 
+          VALUE_T tempValuePrev=value;
+          KEY_T tempKeyCurrent=testkey; 
           VALUE_T tempValueCurrent;
-          VALUE_T tempValueNext;
+          rc=b.GetVal(offset,tempValueCurrent);
+          if (rc) { return rc; }
 
-          return InsertRecursion();
+          // iterate through and move all keys and values over by one
+          for (i=offset;i<b.info.numkeys;i++) {
+            rc=b.SetKey(i,tempKeyPrev);
+            if (rc) { return rc; }
+            rc=b.SetVal(i,tempValuePrev);
+            if (rc) { return rc; }
+            tempKeyPrev=tempKeyCurrent;
+            tempValuePrev=tempValueCurrent;
+            rc=b.GetKey(i+1,tempKeyCurrent);
+            if (rc) { return rc; }
+            rc=b.GetVal(i+1,tempValueCurrent);
+            if (rc) { return rc; }
+          }
+            
+          // increment number of keys
+          b.info.numkeys+=1;
+
+          // edge case where we don't want to get next key and val
+          // just set the key and val of last position in b 
+          rc=b.SetKey(b.info.numkeys-1,tempKeyCurrent);
+          if (rc) { return rc; }
+          rc=b.SetVal(b.info.numkeys-1,tempValueCurrent);
+          if (rc) { return rc; }
+          rc=b.Serialize(buffercache,node);
+          if (rc) { return rc; }
+          // if the node is now too big, split using recursion
+          //return InsertRecursion();
+          return 0;
       }
     }
-    return ERROR_NONEXISTENT;
+    // there is no key larger than the new key
+    // add it on to the end of b
+    //
+    // increment number of keys
+    b.info.numkeys+=1;
+
+    // set the key and val
+    rc=b.SetKey(b.info.numkeys-1,key);
+    if (rc) { return rc; }
+    rc=b.SetVal(b.info.numkeys-1,value);
+    if (rc) { return rc; }
+    rc=b.Serialize(buffercache,node);
+    if (rc) { return rc; }
+
+    // if the node is too big, split using recursion
+    //
     break;
   default:
     // We can't be looking at anything other than a root, internal, or leaf
@@ -427,9 +478,9 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
   return ERROR_INSANE;
 }
 
-ERROR_T BTreeIndex::InsertRecursion(const &node, const &key, const &value, &newkey, &newnode)
+ERROR_T BTreeIndex::InsertRecursion(const BTreeNode &node, const KEY_T &key, const VALUE_T &value, KEY_T &newkey, BTreeNode &newnode)
 {
-    
+  return ERROR_INSANE;    
 }
   
 ERROR_T BTreeIndex::Update(const KEY_T &key, const VALUE_T &value)

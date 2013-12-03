@@ -108,7 +108,7 @@ public:
 
   // return zero on on success
   // return ERROR_NOSPACE if you run out of disk space 
-  ERROR_T InsertRecursion(const &node, const &key, const &value, &newkey, &newnode);  
+  ERROR_T InsertRecursion(const BTreeNode &node, const KEY_T &key, const VALUE_T &value, KEY_T &newkey, BTreeNode &newnode);  
 
   // return zero on success
   // return ERROR_NONEXISTENT  if the key doesn't exist
