@@ -522,6 +522,8 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                 if (rc) { return rc; }
             }
       // if now too full, split and return the new node
+
+
         } else {
       // There are no keys at all on this node, so nowhere to go
             return ERROR_NONEXISTENT;
@@ -771,8 +773,79 @@ ERROR_T BTreeIndex::Display(ostream &o, BTreeDisplayType display_type) const
 
 ERROR_T BTreeIndex::SanityCheck() const
 {
-  // WRITE ME
-    return ERROR_UNIMPL;
+  ERROR_T rc;
+  rc=NodesInOrder(superblock.info.rootnode);
+  if(rc){
+    return rc;
+  }
+}
+
+ERROT_T BTreeIndex::NodesInOrder(const SIZE_T &node) 
+{
+    KEY_T key;
+    SIZE_T ptr;
+    BTreeNode b;
+
+    rc= b.Unserialize(buffercache,node);
+    if(rc) {
+        return rc;
+    }
+    switch(b.info.nodetype){
+        case BTREE_ROOT_NODE:
+        case BTREE_INTERIOR_NODE:
+        if (b.info.numkeys>0) { 
+            KEY_T prev = NULL;
+            for (offset=0;offset<=b.info.numkeys;offset++) { 
+
+                rc=b.GetKey(offset,key);
+                if(prev==NULL){
+                    prev = key;
+                } else {
+                    if(key>=prev){
+                        prev=key;
+                    }else{
+                        //This value is less than the one before it. Uh oh.
+                        return ERROR_INSANE;
+                    }
+                }
+
+                // Recurse down to check the next nodes
+                rc=b.GetPtr(offset,ptr);
+                if (rc) { return rc; }
+                rc=NodesInOrder(ptr);
+                if (rc) { return rc; }
+            }
+        }
+        return ERROR_NOERROR;
+        break;
+        case BTREE_LEAF_NODE:
+        if (b.info.numkeys>0) { 
+            KEY_T prev = NULL;
+            for (offset=0;offset<=b.info.numkeys;offset++) { 
+
+                rc=b.GetKey(offset,key);
+                if(prev==NULL){
+                    prev = key;
+                } else {
+                    if(key>=prev){
+                        prev=key;
+                    }else{
+                        //This value is less than the one before it. Uh oh.
+                        return ERROR_INSANE;
+                    }
+                }
+            }
+        }
+        break;
+        default:
+        if (display_type==BTREE_DEPTH_DOT) { 
+        } else {
+            o << "Unsupported Node Type " << b.info.nodetype ;
+        }
+        return ERROR_INSANE;
+
+    }
+
 }
 
 
