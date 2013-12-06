@@ -356,12 +356,15 @@ ERROR_T BTreeIndex::Lookup(const KEY_T &key, VALUE_T &value)
 
 ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 {
-  BTreeNode *newnode=NULL;
-  KEY_T *newkey=NULL;
+  // FIGURE OUT HOW
+  // TO INITIALIZE THESE POINTERS
+  // TO NULL
+  BTreeNode newnode=NULL;
+  KEY_T newkey=NULL;
   return InsertRecursion(superblock.info.rootnode, key, value, newkey, newnode);
 }
 
-ERROR_T BTreeIndex::InsertRecursion(const BTreeNode &node, const KEY_T &key, const VALUE_T &value, KEY_T *newkey, BTreeNode *newnode)
+ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const VALUE_T &value, KEY_T &newkey, SIZE_T &newnode)
 {
   // first do lookup to find the leaf node we need to insert into
   // insert and split if necessary, return pointer to newnode if splitting
@@ -389,7 +392,7 @@ ERROR_T BTreeIndex::InsertRecursion(const BTreeNode &node, const KEY_T &key, con
       if (rc) {  return rc; }
       if (key<testkey || key==testkey) {
 	    // OK, so we now have the first key that's larger
-	    // so we ned to recurse on the ptr immediately previous to 
+	    // so we need to recurse on the ptr immediately previous to 
 	    // this one, if it exists
 	    rc=b.GetPtr(offset,ptr);
 	    if (rc) { return rc; }
@@ -397,8 +400,47 @@ ERROR_T BTreeIndex::InsertRecursion(const BTreeNode &node, const KEY_T &key, con
         if (rc) { return rc; }
         if (newnode) {
           // fix up pointers for this interior node
+          // initialize temporary key and value variables
+          KEY_T tempKeyPrev=newkey;
+
+          // FIGURE OUT HOW
+          // TO GET POINTER TO NEWNODE
+          // GIVEN THAT IT IS PASSED BY REFERENCE
+          // TO THIS FUNCTION
+          SIZE_T tempPtrPrev=*newnode;
+          KEY_T tempKeyCurrent=testkey; 
+          SIZE_T tempPtrCurrent;
+          rc=b.GetPtr(offset,tempPtrCurrent);
+          if (rc) { return rc; }
+
+          // iterate through and move all keys and values over by one
+          for (SIZE_T i=offset;i<b.info.numkeys;i++) {
+            rc=b.SetKey(i,tempKeyPrev);
+            if (rc) { return rc; }
+            rc=b.SetPtr(i,tempPtrPrev);
+            if (rc) { return rc; }
+            tempKeyPrev=tempKeyCurrent;
+            tempPtrPrev=tempPtrCurrent;
+            rc=b.GetKey(i+1,tempKeyCurrent);
+            if (rc) { return rc; }
+            rc=b.GetPtr(i+1,tempPtrCurrent);
+            if (rc) { return rc; }
+          }
+            
+          // increment number of keys
+          b.info.numkeys+=1;
+
+          // edge case where we don't want to get next key and val
+          // just set the key and val of last position in b 
+          rc=b.SetKey(b.info.numkeys-1,tempKeyCurrent);
+          if (rc) { return rc; }
+          rc=b.SetPtr(b.info.numkeys-1,tempPtrCurrent);
+          if (rc) { return rc; }
+          rc=b.Serialize(buffercache,node);
+          if (rc) { return rc; }
+          // if the node is now too full, split and return the new node
+          return ERROR_NOERROR
         }
-        // if now too full, split and return the new node
       }
     }
     // if we got here, we need to go to the next pointer, if it exists
@@ -409,6 +451,40 @@ ERROR_T BTreeIndex::InsertRecursion(const BTreeNode &node, const KEY_T &key, con
       if (rc) { return rc; }
       if (newnode) {
           // fix up pointers for this interior node
+          
+          // initialize temporary key and ptr variables
+          KEY_T tempKeyPrev=key; 
+          SIZE_T tempPtrPrev=ptr;
+          KEY_T tempKeyCurrent=testkey; 
+          SIZE_T tempPtrCurrent;
+          rc=b.GetPtr(offset,tempValueCurrent);
+          if (rc) { return rc; }
+
+          // iterate through and move all keys and values over by one
+          for (SIZE_T i=offset;i<b.info.numkeys;i++) {
+            rc=b.SetKey(i,tempKeyPrev);
+            if (rc) { return rc; }
+            rc=b.SetVal(i,tempValuePrev);
+            if (rc) { return rc; }
+            tempKeyPrev=tempKeyCurrent;
+            tempValuePrev=tempValueCurrent;
+            rc=b.GetKey(i+1,tempKeyCurrent);
+            if (rc) { return rc; }
+            rc=b.GetVal(i+1,tempValueCurrent);
+            if (rc) { return rc; }
+          }
+            
+          // increment number of keys
+          b.info.numkeys+=1;
+
+          // edge case where we don't want to get next key and val
+          // just set the key and val of last position in b 
+          rc=b.SetKey(b.info.numkeys-1,tempKeyCurrent);
+          if (rc) { return rc; }
+          rc=b.SetVal(b.info.numkeys-1,tempValueCurrent);
+          if (rc) { return rc; }
+          rc=b.Serialize(buffercache,node);
+          if (rc) { return rc; }
       }
       // if now too full, split and return the new node
     } else {
@@ -464,6 +540,41 @@ ERROR_T BTreeIndex::InsertRecursion(const BTreeNode &node, const KEY_T &key, con
           if (rc) { return rc; }
           // if the node is now too big, split using recursion and return the new node
           // otherwise just return 0
+          if (floor(b.info.GetNumSlotsAsLeaf*(2/3)) <= b.info.numkeys) {
+              // copy b into splitNode
+              BTreeNode splitNode = b;
+
+              halfIndex= floor(b.info.numkeys/2);
+              rc=GetKey(halfIndex,newkey);
+              if (rc) { return rc; }
+              
+              // move the second half of the old node into the beginning of newnode
+              SIZE_T insertIndex=0;
+              KEY_T tempKey;
+              VALUE_T tempValue;
+              for (SIZE_T i=halfIndex;i<splitNode.info.numkeys;i++) {
+                  rc=b.GetKey(i,tempKey);
+                  if (rc) { return rc; }
+                  rc=b.GetVal(i,tempValue);
+                  if (rc) { return rc; }
+                  rc=splitNode.SetKey(insertIndex,tempKey);
+                  if (rc) { return rc; }
+                  rc=splitNode.SetVal(insertIndex,tempValue);
+                  if (rc) { return rc; }
+                  insertIndex++;
+              }
+              b.info.numkeys=halfIndex;
+              splitNode.info.numkeys=insertIndex;
+
+              // allocate space for newnode on the disk
+              rc=AllocateNode(newnode);
+              if (rc) { return rc; }
+
+              // serialize newnode to the disk
+              rc=splitNode.Serialize(buffercache,newnode);
+              if (rc) { return rc; }
+              return ERROR_NOERROR;
+          }
           return ERROR_NOERROR;
       }
     }
@@ -482,6 +593,41 @@ ERROR_T BTreeIndex::InsertRecursion(const BTreeNode &node, const KEY_T &key, con
     if (rc) { return rc; }
 
     // if the node is too big, split using recursion, then return the new node
+    if (floor(b.info.GetNumSlotsAsLeaf*(2/3)) <= b.info.numkeys) {
+              // copy b into splitNode
+              BTreeNode splitNode = b;
+
+              halfIndex= floor(b.info.numkeys/2);
+              rc=GetKey(halfIndex,newkey);
+              if (rc) { return rc; }
+              
+              // move the second half of the old node into the beginning of newnode
+              SIZE_T insertIndex=0;
+              KEY_T tempKey;
+              VALUE_T tempValue;
+              for (SIZE_T i=halfIndex;i<splitNode.info.numkeys;i++) {
+                  rc=b.GetKey(i,tempKey);
+                  if (rc) { return rc; }
+                  rc=b.GetVal(i,tempValue);
+                  if (rc) { return rc; }
+                  rc=splitNode.SetKey(insertIndex,tempKey);
+                  if (rc) { return rc; }
+                  rc=splitNode.SetVal(insertIndex,tempValue);
+                  if (rc) { return rc; }
+                  insertIndex++;
+              }
+              b.info.numkeys=halfIndex;
+              splitNode.info.numkeys=insertIndex;
+
+              // allocate space for newnode on the disk
+              rc=AllocateNode(newnode);
+              if (rc) { return rc; }
+
+              // serialize newnode to the disk
+              rc=splitNode.Serialize(buffercache,newnode);
+              if (rc) { return rc; }
+              return ERROR_NOERROR;
+    }
     return ERROR_NOERROR;
     break;
   default:
