@@ -407,7 +407,7 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
           // TO GET POINTER TO NEWNODE
           // GIVEN THAT IT IS PASSED BY REFERENCE
           // TO THIS FUNCTION
-                    SIZE_T tempPtrPrev=*newnode;
+                    SIZE_T tempPtrPrev=newnode;
                     KEY_T tempKeyCurrent=testkey; 
                     SIZE_T tempPtrCurrent;
                     rc=b.GetPtr(offset,tempPtrCurrent);
@@ -439,7 +439,42 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                     rc=b.Serialize(buffercache,node);
                     if (rc) { return rc; }
           // if the node is now too full, split and return the new node
-                    return ERROR_NOERROR
+                    if (floor(b.info.GetNumSlotsAsInterior*(2/3)) <= b.info.numkeys) {
+              //    copy b into splitNode
+                       BTreeNode splitNode = b;
+
+                       halfIndex= floor(b.info.numkeys/2);
+                       rc=GetKey(halfIndex,newkey);
+                       if (rc) { return rc; }
+                       
+              //    move the second half of the old node into the beginning of newnode
+                       SIZE_T insertIndex=0;
+                       KEY_T tempKey;
+                       VALUE_T tempValue;
+                       for (SIZE_T i=halfIndex;i<splitNode.info.numkeys;i++) {
+                           rc=b.GetKey(i,tempKey);
+                           if (rc) { return rc; }
+                           rc=b.GetVal(i,tempValue);
+                           if (rc) { return rc; }
+                           rc=splitNode.SetKey(insertIndex,tempKey);
+                           if (rc) { return rc; }
+                           rc=splitNode.SetVal(insertIndex,tempValue);
+                           if (rc) { return rc; }
+                           insertIndex++;
+                       }
+                       b.info.numkeys=halfIndex;
+                       splitNode.info.numkeys=insertIndex;
+
+              //    allocate space for newnode on the disk
+                       rc=AllocateNode(newnode);
+                       if (rc) { return rc; }
+
+              //    serialize newnode to the disk
+                       rc=splitNode.Serialize(buffercache,newnode);
+                       if (rc) { return rc; }
+                       return ERROR_NOERROR;
+                    }   
+                    return ERROR_NOERROR;   
                 }
             }
         }
