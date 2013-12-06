@@ -774,17 +774,24 @@ ERROR_T BTreeIndex::Display(ostream &o, BTreeDisplayType display_type) const
 ERROR_T BTreeIndex::SanityCheck() const
 {
   ERROR_T rc;
-  rc=NodesInOrder(superblock.info.rootnode);
+  SIZE_T totalKeys;
+  // check if keys in order within node and count up keys in leaf nodes
+  rc=NodesInOrder(superblock.info.rootnode, totalKeys);
   if(rc){
     return rc;
   }
+  // if totalkeys in leaf nodes does not match numkeys of superblock, insane tree
+  if (totalKeys != superblock.info.numkeys) {
+	return ERROR_INSANE;
+  }	
 }
 
-ERROT_T BTreeIndex::NodesInOrder(const SIZE_T &node) 
+ERROT_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) 
 {
     KEY_T key;
     SIZE_T ptr;
     BTreeNode b;
+    totalKeys = 0;
 
     rc= b.Unserialize(buffercache,node);
     if(rc) {
@@ -820,10 +827,12 @@ ERROT_T BTreeIndex::NodesInOrder(const SIZE_T &node)
         break;
         case BTREE_LEAF_NODE:
         if (b.info.numkeys>0) { 
+	    // keep track of the total number of keys
+	    totalKeys += b.info.numkeys;
             KEY_T prev = NULL;
             for (offset=0;offset<=b.info.numkeys;offset++) { 
-
                 rc=b.GetKey(offset,key);
+		if ( rc ) { return rc; } 
                 if(prev==NULL){
                     prev = key;
                 } else {
@@ -836,26 +845,18 @@ ERROT_T BTreeIndex::NodesInOrder(const SIZE_T &node)
                 }
             }
         }
+	return ERROR_NOERROR
         break;
         default:
-        if (display_type==BTREE_DEPTH_DOT) { 
-        } else {
-            o << "Unsupported Node Type " << b.info.nodetype ;
-        }
-        return ERROR_INSANE;
-
+	// should never get here
+        return ERROR_NOERROR;
     }
-
 }
 
 
 
 ostream & BTreeIndex::Print(ostream &os) const
 {
-  // WRITE ME
+    Display(os, BTREE_SORTED_KEYVAL);
     return os;
 }
-
-
-
-
