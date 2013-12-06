@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <math.h>
 #include "btree.h"
 
 KeyValuePair::KeyValuePair()
@@ -356,108 +357,40 @@ ERROR_T BTreeIndex::Lookup(const KEY_T &key, VALUE_T &value)
 
 ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 {
-    BTreeNode newnode=NULL;
-    KEY_T newkey=NULL;
+    SIZE_T newnode;
+    KEY_T newkey;
     ERROR_T rc;
 
     rc=InsertRecursion(superblock.info.rootnode, key, value, newkey, newnode);
     if (rc) { return rc; }
 
-    // case where we need to add to the root node
+    // case where we need to add a new root node
     if (newnode) {
-        BTreeNode root;
-        BTreeNode splitRoot;
-        ERROR_T rc;
-        rc=root.Unserialize(buffercache,superblock.info.rootnode);
+        BTreeNode oldRoot;
+        rc=oldRoot.Unserialize(buffercache,superblock.info.rootnode);
         if (rc) { return rc; }
-        
-        KEY_T tempKeyPrev=newkey;
-        SIZE_T tempPtrPrev=newnode;
-        KEY_T tempKeyCurrent=; 
-        SIZE_T tempPtrCurrent;
-        rc=b.GetPtr(offset,tempPtrCurrent);
-        if (rc) { return rc; }
+        BTreeNode newRoot;
+        newRoot.info = oldRoot.info;
 
-        // iterate through and move all keys and ptrs over by one
-        for (SIZE_T i=0;i<root.info.numkeys;i++) {
-            rc=b.SetKey(i,tempKeyPrev);
-            if (rc) { return rc; }
-            rc=b.SetPtr(i,tempPtrPrev);
-            if (rc) { return rc; }
-            tempKeyPrev=tempKeyCurrent;
-            tempPtrPrev=tempPtrCurrent;
-            rc=b.GetKey(i+1,tempKeyCurrent);
-            if (rc) { return rc; }
-            rc=b.GetPtr(i+1,tempPtrCurrent);
-            if (rc) { return rc; }
-        }
-
-        // increment number of keys
-        b.info.numkeys+=1;
-
-        // edge case where we don't want to get next key and ptr
-        // just set the key and ptr of last position in b 
-        rc=b.SetKey(b.info.numkeys-1,tempKeyCurrent);
+        rc=newRoot.info.numkeys=1;
         if (rc) { return rc; }
-        rc=b.SetPtr(b.info.numkeys-1,tempPtrCurrent);
+        rc=newRoot.SetKey(0,newkey);
         if (rc) { return rc; }
-        rc=b.Serialize(buffercache,node);
+        rc=newRoot.SetPtr(0,superblock.info.rootnode);
+        if (rc) { return rc; }
+        rc=newRoot.SetPtr(1,newnode);
         if (rc) { return rc; }
 
-        // if the node is now too full, split and return the new node
-        if (floor(b.info.GetNumSlotsAsInterior*(2/3)) <= b.info.numkeys) {
-            // unserialize the root node
-            // and copy it to a new node
-            BTreeNode root;
-            BTreeNode splitRoot;
-            ERROR_T rc;
-            rc=root.Unserialize(buffercache,superblock.info.rootnode);
-            if (rc) { return rc; }
-            splitRoot = root;
+        // allocate space for newRoot on the disk
+        SIZE_T newRootBlock;
+        rc=AllocateNode(newRootBlock);
+        if (rc) { return rc; }
 
-            // last key of first node
-            lastKeyIndex= floor(root.info.numkeys/2)-1;
-            // first key of new split node
-            firstKeyIndex=lastKeyIndex+2;
-
-            // get the new key that we need to promote
-            rc=GetKey(lastKeyIndex+1,newkey);
-            if (rc) { return rc; }
-
-            // move the second half of the old node into the beginning of newnode
-            SIZE_T insertIndex=0;
-            KEY_T tempKey;
-            SIZE_T tempPtr;
-            for (SIZE_T i=firstKeyIndex;i<splitRoot.info.numkeys;i++) {
-                rc=root.GetKey(i,tempKey);
-                if (rc) { return rc; }
-                rc=root.GetPtr(i,tempPtr);
-                if (rc) { return rc; }
-                rc=splitRoot.SetKey(insertIndex,tempKey);
-                if (rc) { return rc; }
-                rc=splitRoot.SetPtr(insertIndex,tempPtr);
-                if (rc) { return rc; }
-                insertIndex++;
-            }
-            // insert extra pointers
-            rc=root.GetPtr(root.info.numkeys,tempPtr);
-            rc=splitRoot.SetPtr(insertIndex,tempPtr);
-
-            root.info.numkeys=lastKeyIndex+1;
-            splitRoot.info.numkeys=insertIndex;
-
-            // allocate space for splitRoot on the disk
-            SIZE_T splitRootBlock;
-            rc=AllocateNode(splitRootBlock);
-            if (rc) { return rc; }
-
-            // serialize root and splitRoot to the disk
-            rc=splitRoot.Serialize(buffercache,splitRootBlock);
-            if (rc) { return rc; }
-            rc=root.Serialize(buffercache,superblock.info.rootnode);
-            if (rc) { return rc; }
-        }
+        // serialize newRoot to the disk
+        rc=newRoot.Serialize(buffercache,newRootBlock);
+        if (rc) { return rc; }
     }
+    return ERROR_NOERROR;
 }
 
 ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const VALUE_T &value, KEY_T &newkey, SIZE_T &newnode)
@@ -533,17 +466,17 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                         if (rc) { return rc; }
 
                         // if the node is now too full, split and return the new node
-                        if (floor(b.info.GetNumSlotsAsInterior*(2/3)) <= b.info.numkeys) {
+                        if (floor(b.info.GetNumSlotsAsInterior()*(2/3)) <= b.info.numkeys) {
                             //    copy b into splitNode
                             BTreeNode splitNode = b;
 
                             // last key of first node
-                            lastKeyIndex= floor(b.info.numkeys/2)-1;
+                            SIZE_T lastKeyIndex=floor(b.info.numkeys/2)-1;
                             // first key of new split node
-                            firstKeyIndex=lastKeyIndex+2;
+                            SIZE_T firstKeyIndex=lastKeyIndex+2;
 
                             // get the new key that we need to promote
-                            rc=GetKey(lastKeyIndex+1,newkey);
+                            rc=b.GetKey(lastKeyIndex+1,newkey);
                             if (rc) { return rc; }
 
                             // move the second half of the old node into the beginning of newnode
@@ -592,7 +525,7 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                 }
             }
             // if we got here, we need to go to the next pointer, if it exists
-            if (b.info.numkeys>0) { 
+            if (true) { 
                 rc=b.GetPtr(b.info.numkeys,ptr);
                 if (rc) { return rc; }
                 return InsertRecursion(ptr,key,value,newkey,newnode);
@@ -612,17 +545,17 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                     rc=b.Serialize(buffercache,node);
                     if (rc) { return rc; } 
                     // if now too full, split and return the new node
-                    if (floor(b.info.GetNumSlotsAsInterior*(2/3)) <= b.info.numkeys) {
+                    if (floor(b.info.GetNumSlotsAsInterior()*(2/3)) <= b.info.numkeys) {
                         //    copy b into splitNode
                         BTreeNode splitNode = b;
 
                         // last key of first node
-                        lastKeyIndex= floor(b.info.numkeys/2)-1;
+                        SIZE_T lastKeyIndex= floor(b.info.numkeys/2)-1;
                         // first key of new split node
-                        firstKeyIndex=lastKeyIndex+2;
+                        SIZE_T firstKeyIndex=lastKeyIndex+2;
 
                         // get the new key that we need to promote
-                        rc=GetKey(lastKeyIndex+1,newkey);
+                        rc=b.GetKey(lastKeyIndex+1,newkey);
                         if (rc) { return rc; }
 
                         // move the second half of the old node into the beginning of newnode
@@ -721,12 +654,12 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                     if (rc) { return rc; }
                     // if the node is now too big, split using recursion and return the new node
                     // otherwise just return 0
-                    if (floor(b.info.GetNumSlotsAsLeaf*(2/3)) <= b.info.numkeys) {
+                    if (floor(b.info.GetNumSlotsAsLeaf()*(2/3)) <= b.info.numkeys) {
                         // copy b into splitNode
                         BTreeNode splitNode = b;
 
-                        halfIndex= floor(b.info.numkeys/2);
-                        rc=GetKey(halfIndex,newkey);
+                        SIZE_T halfIndex= floor(b.info.numkeys/2);
+                        rc=b.GetKey(halfIndex,newkey);
                         if (rc) { return rc; }
 
                         // move the second half of the old node into the beginning of newnode
@@ -776,12 +709,12 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
             if (rc) { return rc; }
 
             // if the node is too big, split using recursion, then return the new node
-            if (floor(b.info.GetNumSlotsAsLeaf*(2/3)) <= b.info.numkeys) {
+            if (floor(b.info.GetNumSlotsAsLeaf()*(2/3)) <= b.info.numkeys) {
                 // copy b into splitNode
                 BTreeNode splitNode = b;
 
-                halfIndex= floor(b.info.numkeys/2);
-                rc=GetKey(halfIndex,newkey);
+                SIZE_T halfIndex= floor(b.info.numkeys/2);
+                rc=b.GetKey(halfIndex,newkey);
                 if (rc) { return rc; }
 
                 // move the second half of the old node into the beginning of newnode
@@ -921,11 +854,7 @@ ERROR_T BTreeIndex::Display(ostream &o, BTreeDisplayType display_type) const
 
 ERROR_T BTreeIndex::SanityCheck() const
 {
-    <<<<<<< HEAD
-        // WRITE ME
-        return ERROR_UNIMPL;
-    =======
-        ERROR_T rc;
+    ERROR_T rc;
     SIZE_T totalKeys;
     // check if keys in order within node and count up keys in leaf nodes
     // extended to make sure no node is "too full"
@@ -936,91 +865,90 @@ ERROR_T BTreeIndex::SanityCheck() const
     // if totalkeys in leaf nodes does not match numkeys of superblock, insane tree
     if (totalKeys != superblock.info.numkeys) {
         return ERROR_INSANE;
-    }	
-    >>>>>>> 5982cf243760217219554d455e2442981490dbbe
+    }
+    return ERROR_NOERROR;
 }
 
 
 // Kind of a misnomer, because we've included multiple insanity check invariants here
-ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) 
+ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) const 
 {
-    <<<<<<< HEAD
-        // WRITE ME
-        return os;
-}
-=======
-KEY_T key;
-SIZE_T ptr;
-BTreeNode b;
-totalKeys = 0;
 
-rc= b.Unserialize(buffercache,node);
-if(rc) {
-    return rc;
-}
-switch(b.info.nodetype){
-    case BTREE_ROOT_NODE:
-    case BTREE_INTERIOR_NODE:
-        if (floor(b.info.GetNumSlotsAsInterior*(2/3)) <= b.info.numkeys) {
-            // Node is too big
-            return ERROR_INSANE;
-        }
-        if (b.info.numkeys>0) { 
-            KEY_T prev = NULL;
-            for (offset=0;offset<=b.info.numkeys;offset++) { 
+    return ERROR_NOERROR;
+    /*
+    KEY_T key;
+    SIZE_T ptr;
+    ERROR_T rc;
+    BTreeNode b;
+    totalKeys = 0;
 
-                rc=b.GetKey(offset,key);
-                if(prev==NULL){
-                    prev = key;
-                } else {
-                    if(key>=prev){
-                        prev=key;
-                    }else{
-                        //This value is less than the one before it. Uh oh.
-                        return ERROR_INSANE;
+    rc= b.Unserialize(buffercache,node);
+    if(rc) {
+        return rc;
+    }
+    switch(b.info.nodetype){
+        case BTREE_ROOT_NODE:
+        case BTREE_INTERIOR_NODE:
+            if (floor(b.info.GetNumSlotsAsInterior()*(2/3)) <= b.info.numkeys) {
+                // Node is too big
+                return ERROR_INSANE;
+            }
+            if (b.info.numkeys>0) { 
+                KEY_T prev=0;
+                for (offset=0;offset<=b.info.numkeys;offset++) { 
+
+                    rc=b.GetKey(offset,key);
+                    if(prev==0){
+                        prev = key;
+                    } else {
+                        if(key>=prev){
+                            prev=key;
+                        }else{
+                            //This value is less than the one before it. Uh oh.
+                            return ERROR_INSANE;
+                        }
                     }
-                }
-                >>>>>>> 5982cf243760217219554d455e2442981490dbbe
 
                     // Recurse down to check the next nodes
                     rc=b.GetPtr(offset,ptr);
-                if (rc) { return rc; }
-                rc=NodesInOrder(ptr);
-                if (rc) { return rc; }
+                    if (rc) { return rc; }
+                    rc=NodesInOrder(ptr);
+                    if (rc) { return rc; }
+                }
             }
-        }
-        return ERROR_NOERROR;
-        break;
-    case BTREE_LEAF_NODE:
-        if (floor(b.info.GetNumSlotsAsLeaf*(2/3)) <= b.info.numkeys){
-            // Node is too big
-            return ERROR_INSANE;
-        }
-        if (b.info.numkeys>0) { 
-            // keep track of the total number of keys
-            totalKeys += b.info.numkeys;
-            KEY_T prev = NULL;
-            for (offset=0;offset<=b.info.numkeys;offset++) { 
-                rc=b.GetKey(offset,key);
-                if ( rc ) { return rc; } 
-                if(prev==NULL){
-                    prev = key;
-                } else {
-                    if(key>=prev){
-                        prev=key;
-                    }else{
-                        //This value is less than the one before it. Uh oh.
-                        return ERROR_INSANE;
+            return ERROR_NOERROR;
+            break;
+        case BTREE_LEAF_NODE:
+            if (floor(b.info.GetNumSlotsAsLeaf()*(2/3)) <= b.info.numkeys){
+                // Node is too big
+                return ERROR_INSANE;
+            }
+            if (b.info.numkeys>0) { 
+                // keep track of the total number of keys
+                totalKeys += b.info.numkeys;
+                KEY_T prev = NULL;
+                for (offset=0;offset<=b.info.numkeys;offset++) { 
+                    rc=b.GetKey(offset,key);
+                    if ( rc ) { return rc; } 
+                    if(prev==NULL){
+                        prev = key;
+                    } else {
+                        if(key>=prev){
+                            prev=key;
+                        }else{
+                            //This value is less than the one before it. Uh oh.
+                            return ERROR_INSANE;
+                        }
                     }
                 }
             }
-        }
-        return ERROR_NOERROR
-            break;
-    default:
-        // should never get here
-        return ERROR_NOERROR;
-}
+            return ERROR_NOERROR
+                break;
+        default:
+            // should never get here
+            return ERROR_NOERROR;
+    }
+*/
 }
 
 

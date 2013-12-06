@@ -134,7 +134,7 @@ public:
   // looks for nodes in order
   // also keeps track of keys in leaves
   //
-  ERROR_T NodesInOrder(const SIZE_T&, SIZE_T&);
+  ERROR_T NodesInOrder(const SIZE_T&, SIZE_T&) const;
 
   // Display tree
   // BTREE_DEPTH means to do a depth first traversal of 
