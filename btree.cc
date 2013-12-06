@@ -786,7 +786,7 @@ ERROR_T BTreeIndex::SanityCheck() const
   }	
 }
 
-ERROT_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) 
+ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) 
 {
     KEY_T key;
     SIZE_T ptr;
