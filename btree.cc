@@ -366,6 +366,7 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 
     // case where we need to add a new root node
     if (newnode) {
+        return ERROR_INSANE;
         BTreeNode oldRoot;
         rc=oldRoot.Unserialize(buffercache,superblock.info.rootnode);
         if (rc) { return rc; }
@@ -390,6 +391,7 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
         rc=newRoot.Serialize(buffercache,newRootBlock);
         if (rc) { return rc; }
     }
+    superblock.info.numkeys++;
     return ERROR_NOERROR;
 }
 
@@ -413,6 +415,43 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
 
     switch (b.info.nodetype) { 
         case BTREE_ROOT_NODE:
+            if (b.info.numkeys==0) {
+                BTreeNode leaf1=b;
+                BTreeNode leaf2=b;
+                leaf1.info.numkeys=1;
+                leaf2.info.numkeys=0;
+                leaf1.info.nodetype=BTREE_LEAF_NODE;
+                leaf2.info.nodetype=BTREE_LEAF_NODE;
+
+                b.info.numkeys++;
+                rc=leaf1.SetKey(0,key);
+                if (rc) { return rc; }
+                rc=leaf1.SetVal(0,value);
+                if (rc) { return rc; }
+                rc=b.SetKey(0,key);
+                if (rc) { return rc; }
+                
+                // allocate space for leaves
+                SIZE_T leafBlock1;
+                SIZE_T leafBlock2;
+                rc=AllocateNode(leafBlock1);
+                if (rc) { return rc; }
+                rc=AllocateNode(leafBlock2);
+                if (rc) { return rc; }
+                // update Ptrs of root node
+                rc=b.SetPtr(0,leafBlock1);
+                if (rc) { return rc; }
+                rc=b.SetPtr(1,leafBlock2);
+                if (rc) { return rc; }
+                // serialize nodes
+                rc=b.Serialize(buffercache,node);
+                if (rc) { return rc; }
+                rc=leaf1.Serialize(buffercache,leafBlock1);
+                if (rc) { return rc; }
+                rc=leaf2.Serialize(buffercache,leafBlock2);
+                if (rc) { return rc; }
+                return ERROR_NOERROR;
+            }
         case BTREE_INTERIOR_NODE:
             // Scan through key/ptr pairs
             //and recurse if possible
@@ -753,7 +792,6 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
             return ERROR_INSANE;
             break;
     }  
-
     return ERROR_INSANE;
 }
 
