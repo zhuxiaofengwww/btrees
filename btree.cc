@@ -846,18 +846,112 @@ ERROR_T BTreeIndex::Display(ostream &o, BTreeDisplayType display_type) const
 
 ERROR_T BTreeIndex::SanityCheck() const
 {
+<<<<<<< HEAD
     // WRITE ME
     return ERROR_UNIMPL;
+=======
+  ERROR_T rc;
+  SIZE_T totalKeys;
+  // check if keys in order within node and count up keys in leaf nodes
+  // extended to make sure no node is "too full"
+  rc=NodesInOrder(superblock.info.rootnode, totalKeys);
+  if(rc){
+    return rc;
+  }
+  // if totalkeys in leaf nodes does not match numkeys of superblock, insane tree
+  if (totalKeys != superblock.info.numkeys) {
+	return ERROR_INSANE;
+  }	
+>>>>>>> 5982cf243760217219554d455e2442981490dbbe
+}
+
+
+// Kind of a misnomer, because we've included multiple insanity check invariants here
+ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) 
+{
+<<<<<<< HEAD
+    // WRITE ME
+    return os;
+}
+=======
+    KEY_T key;
+    SIZE_T ptr;
+    BTreeNode b;
+    totalKeys = 0;
+
+    rc= b.Unserialize(buffercache,node);
+    if(rc) {
+        return rc;
+    }
+    switch(b.info.nodetype){
+        case BTREE_ROOT_NODE:
+        case BTREE_INTERIOR_NODE:
+        if (floor(b.info.GetNumSlotsAsInterior*(2/3)) <= b.info.numkeys) {
+            // Node is too big
+            return ERROR_INSANE;
+        }
+        if (b.info.numkeys>0) { 
+            KEY_T prev = NULL;
+            for (offset=0;offset<=b.info.numkeys;offset++) { 
+
+                rc=b.GetKey(offset,key);
+                if(prev==NULL){
+                    prev = key;
+                } else {
+                    if(key>=prev){
+                        prev=key;
+                    }else{
+                        //This value is less than the one before it. Uh oh.
+                        return ERROR_INSANE;
+                    }
+                }
+>>>>>>> 5982cf243760217219554d455e2442981490dbbe
+
+                // Recurse down to check the next nodes
+                rc=b.GetPtr(offset,ptr);
+                if (rc) { return rc; }
+                rc=NodesInOrder(ptr);
+                if (rc) { return rc; }
+            }
+        }
+        return ERROR_NOERROR;
+        break;
+        case BTREE_LEAF_NODE:
+        if (floor(b.info.GetNumSlotsAsLeaf*(2/3)) <= b.info.numkeys){
+            // Node is too big
+            return ERROR_INSANE;
+        }
+        if (b.info.numkeys>0) { 
+	    // keep track of the total number of keys
+	       totalKeys += b.info.numkeys;
+            KEY_T prev = NULL;
+            for (offset=0;offset<=b.info.numkeys;offset++) { 
+                rc=b.GetKey(offset,key);
+		        if ( rc ) { return rc; } 
+                if(prev==NULL){
+                    prev = key;
+                } else {
+                    if(key>=prev){
+                        prev=key;
+                    }else{
+                        //This value is less than the one before it. Uh oh.
+                        return ERROR_INSANE;
+                    }
+                }
+            }
+        }
+	    return ERROR_NOERROR
+        break;
+        default:
+	// should never get here
+        return ERROR_NOERROR;
+    }
 }
 
 
 
 ostream & BTreeIndex::Print(ostream &os) const
 {
-    // WRITE ME
+    Display(os, BTREE_SORTED_KEYVAL);
     return os;
 }
-
-
-
-
