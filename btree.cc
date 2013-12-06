@@ -776,6 +776,7 @@ ERROR_T BTreeIndex::SanityCheck() const
   ERROR_T rc;
   SIZE_T totalKeys;
   // check if keys in order within node and count up keys in leaf nodes
+  // extended to make sure no node is "too full"
   rc=NodesInOrder(superblock.info.rootnode, totalKeys);
   if(rc){
     return rc;
@@ -786,6 +787,8 @@ ERROR_T BTreeIndex::SanityCheck() const
   }	
 }
 
+
+// Kind of a misnomer, because we've included multiple insanity check invariants here
 ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) 
 {
     KEY_T key;
@@ -800,6 +803,10 @@ ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys)
     switch(b.info.nodetype){
         case BTREE_ROOT_NODE:
         case BTREE_INTERIOR_NODE:
+        if (floor(b.info.GetNumSlotsAsInterior*(2/3)) <= b.info.numkeys) {
+            // Node is too big
+            return ERROR_INSANE;
+        }
         if (b.info.numkeys>0) { 
             KEY_T prev = NULL;
             for (offset=0;offset<=b.info.numkeys;offset++) { 
@@ -826,13 +833,17 @@ ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys)
         return ERROR_NOERROR;
         break;
         case BTREE_LEAF_NODE:
+        if (floor(b.info.GetNumSlotsAsLeaf*(2/3)) <= b.info.numkeys){
+            // Node is too big
+            return ERROR_INSANE;
+        }
         if (b.info.numkeys>0) { 
 	    // keep track of the total number of keys
-	    totalKeys += b.info.numkeys;
+	       totalKeys += b.info.numkeys;
             KEY_T prev = NULL;
             for (offset=0;offset<=b.info.numkeys;offset++) { 
                 rc=b.GetKey(offset,key);
-		if ( rc ) { return rc; } 
+		        if ( rc ) { return rc; } 
                 if(prev==NULL){
                     prev = key;
                 } else {
@@ -845,7 +856,7 @@ ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys)
                 }
             }
         }
-	return ERROR_NOERROR
+	    return ERROR_NOERROR
         break;
         default:
 	// should never get here
