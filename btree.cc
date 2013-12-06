@@ -450,15 +450,15 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
               //    move the second half of the old node into the beginning of newnode
                        SIZE_T insertIndex=0;
                        KEY_T tempKey;
-                       VALUE_T tempValue;
+                       SIZE_T tempPtr;
                        for (SIZE_T i=halfIndex;i<splitNode.info.numkeys;i++) {
                            rc=b.GetKey(i,tempKey);
                            if (rc) { return rc; }
-                           rc=b.GetVal(i,tempValue);
+                           rc=b.GetPtr(i,tempPtr);
                            if (rc) { return rc; }
                            rc=splitNode.SetKey(insertIndex,tempKey);
                            if (rc) { return rc; }
-                           rc=splitNode.SetVal(insertIndex,tempValue);
+                           rc=splitNode.SetPtr(insertIndex,tempPtr);
                            if (rc) { return rc; }
                            insertIndex++;
                        }
@@ -471,7 +471,7 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
 
               //    serialize newnode to the disk
                        rc=splitNode.Serialize(buffercache,newnode);
-                       if (rc) { return rc; }
+        		if (rc) { return rc; }
                        return ERROR_NOERROR;
                     }   
                     return ERROR_NOERROR;   
