@@ -358,48 +358,105 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 {
     BTreeNode newnode=NULL;
     KEY_T newkey=NULL;
-    return InsertRecursion(superblock.info.rootnode, key, value, newkey, newnode);
-    // case where we need to split the root node
+    ERROR_T rc;
+
+    rc=InsertRecursion(superblock.info.rootnode, key, value, newkey, newnode);
+    if (rc) { return rc; }
+
+    // case where we need to add to the root node
     if (newnode) {
-        // unserialize the root node
-        // and copy it to a new node
         BTreeNode root;
         BTreeNode splitRoot;
         ERROR_T rc;
         rc=root.Unserialize(buffercache,superblock.info.rootnode);
         if (rc) { return rc; }
-        splitRoot = root;
+        
+        KEY_T tempKeyPrev=newkey;
+        SIZE_T tempPtrPrev=newnode;
+        KEY_T tempKeyCurrent=; 
+        SIZE_T tempPtrCurrent;
+        rc=b.GetPtr(offset,tempPtrCurrent);
+        if (rc) { return rc; }
 
-        halfIndex= floor(root.info.numkeys/2);
-
-        // move the second half of old root note into the beginning of splitRoot
-        SIZE_T insertIndex=0;
-        KEY_T tempKey;
-        SIZE_T tempPtr;
-        for (SIZE_T i=halfIndex;i<splitRoot.info.numkeys;i++) {
-            rc=root.GetKey(i,tempKey);
+        // iterate through and move all keys and ptrs over by one
+        for (SIZE_T i=0;i<root.info.numkeys;i++) {
+            rc=b.SetKey(i,tempKeyPrev);
             if (rc) { return rc; }
-            rc=root.GetPtr(i,tempPtr);
+            rc=b.SetPtr(i,tempPtrPrev);
             if (rc) { return rc; }
-            rc=splitRoot.SetKey(insertIndex,tempKey);
+            tempKeyPrev=tempKeyCurrent;
+            tempPtrPrev=tempPtrCurrent;
+            rc=b.GetKey(i+1,tempKeyCurrent);
             if (rc) { return rc; }
-            rc=splitRoot.SetPtr(insertIndex,tempPtr);
+            rc=b.GetPtr(i+1,tempPtrCurrent);
             if (rc) { return rc; }
-            insertIndex++;
         }
-        root.info.numkeys=halfIndex;
-        splitRoot.info.numkeys=insertIndex;
 
-        // allocate space for newnode on the disk
-        SIZE_T splitRootBlock;
-        rc=AllocateNode(splitRootBlock);
+        // increment number of keys
+        b.info.numkeys+=1;
+
+        // edge case where we don't want to get next key and ptr
+        // just set the key and ptr of last position in b 
+        rc=b.SetKey(b.info.numkeys-1,tempKeyCurrent);
+        if (rc) { return rc; }
+        rc=b.SetPtr(b.info.numkeys-1,tempPtrCurrent);
+        if (rc) { return rc; }
+        rc=b.Serialize(buffercache,node);
         if (rc) { return rc; }
 
-        // serialize splitRoot and root to the disk
-        rc=splitRoot.Serialize(buffercache,splitRootBlock);
-        if (rc) { return rc; }
-        rc=root.Serialize(buffercache,superblock.info.rootnode);
-        if (rc) { return rc; }
+        // if the node is now too full, split and return the new node
+        if (floor(b.info.GetNumSlotsAsInterior*(2/3)) <= b.info.numkeys) {
+            // unserialize the root node
+            // and copy it to a new node
+            BTreeNode root;
+            BTreeNode splitRoot;
+            ERROR_T rc;
+            rc=root.Unserialize(buffercache,superblock.info.rootnode);
+            if (rc) { return rc; }
+            splitRoot = root;
+
+            // last key of first node
+            lastKeyIndex= floor(root.info.numkeys/2)-1;
+            // first key of new split node
+            firstKeyIndex=lastKeyIndex+2;
+
+            // get the new key that we need to promote
+            rc=GetKey(lastKeyIndex+1,newkey);
+            if (rc) { return rc; }
+
+            // move the second half of the old node into the beginning of newnode
+            SIZE_T insertIndex=0;
+            KEY_T tempKey;
+            SIZE_T tempPtr;
+            for (SIZE_T i=firstKeyIndex;i<splitRoot.info.numkeys;i++) {
+                rc=root.GetKey(i,tempKey);
+                if (rc) { return rc; }
+                rc=root.GetPtr(i,tempPtr);
+                if (rc) { return rc; }
+                rc=splitRoot.SetKey(insertIndex,tempKey);
+                if (rc) { return rc; }
+                rc=splitRoot.SetPtr(insertIndex,tempPtr);
+                if (rc) { return rc; }
+                insertIndex++;
+            }
+            // insert extra pointers
+            rc=root.GetPtr(root.info.numkeys,tempPtr);
+            rc=splitRoot.SetPtr(insertIndex,tempPtr);
+
+            root.info.numkeys=lastKeyIndex+1;
+            splitRoot.info.numkeys=insertIndex;
+
+            // allocate space for splitRoot on the disk
+            SIZE_T splitRootBlock;
+            rc=AllocateNode(splitRootBlock);
+            if (rc) { return rc; }
+
+            // serialize root and splitRoot to the disk
+            rc=splitRoot.Serialize(buffercache,splitRootBlock);
+            if (rc) { return rc; }
+            rc=root.Serialize(buffercache,superblock.info.rootnode);
+            if (rc) { return rc; }
+        }
     }
 }
 
@@ -480,15 +537,20 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                             //    copy b into splitNode
                             BTreeNode splitNode = b;
 
-                            halfIndex= floor(b.info.numkeys/2);
-                            rc=GetKey(halfIndex,newkey);
+                            // last key of first node
+                            lastKeyIndex= floor(b.info.numkeys/2)-1;
+                            // first key of new split node
+                            firstKeyIndex=lastKeyIndex+2;
+
+                            // get the new key that we need to promote
+                            rc=GetKey(lastKeyIndex+1,newkey);
                             if (rc) { return rc; }
 
-                            //    move the second half of the old node into the beginning of newnode
+                            // move the second half of the old node into the beginning of newnode
                             SIZE_T insertIndex=0;
                             KEY_T tempKey;
                             SIZE_T tempPtr;
-                            for (SIZE_T i=halfIndex;i<splitNode.info.numkeys;i++) {
+                            for (SIZE_T i=firstKeyIndex;i<splitNode.info.numkeys;i++) {
                                 rc=b.GetKey(i,tempKey);
                                 if (rc) { return rc; }
                                 rc=b.GetPtr(i,tempPtr);
@@ -499,14 +561,18 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                                 if (rc) { return rc; }
                                 insertIndex++;
                             }
-                            b.info.numkeys=halfIndex;
+                            // insert extra pointers
+                            rc=b.GetPtr(b.info.numkeys,tempPtr);
+                            rc=splitNode.SetPtr(insertIndex,tempPtr);
+
+                            b.info.numkeys=lastKeyIndex+1;
                             splitNode.info.numkeys=insertIndex;
 
-                            //    allocate space for newnode on the disk
+                            // allocate space for newnode on the disk
                             rc=AllocateNode(newnode);
                             if (rc) { return rc; }
 
-                            //    serialize newnode to the disk
+                            // serialize newnode and b to the disk
                             rc=splitNode.Serialize(buffercache,newnode);
                             if (rc) { return rc; }
                             rc=b.Serialize(buffercache,node);
@@ -550,15 +616,20 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                         //    copy b into splitNode
                         BTreeNode splitNode = b;
 
-                        halfIndex= floor(b.info.numkeys/2);
-                        rc=GetKey(halfIndex,newkey);
+                        // last key of first node
+                        lastKeyIndex= floor(b.info.numkeys/2)-1;
+                        // first key of new split node
+                        firstKeyIndex=lastKeyIndex+2;
+
+                        // get the new key that we need to promote
+                        rc=GetKey(lastKeyIndex+1,newkey);
                         if (rc) { return rc; }
 
-                        //    move the second half of the old node into the beginning of newnode
+                        // move the second half of the old node into the beginning of newnode
                         SIZE_T insertIndex=0;
                         KEY_T tempKey;
                         SIZE_T tempPtr;
-                        for (SIZE_T i=halfIndex;i<splitNode.info.numkeys;i++) {
+                        for (SIZE_T i=firstKeyIndex;i<splitNode.info.numkeys;i++) {
                             rc=b.GetKey(i,tempKey);
                             if (rc) { return rc; }
                             rc=b.GetPtr(i,tempPtr);
@@ -569,14 +640,18 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                             if (rc) { return rc; }
                             insertIndex++;
                         }
-                        b.info.numkeys=halfIndex;
+                        // insert extra pointers
+                        rc=b.GetPtr(b.info.numkeys,tempPtr);
+                        rc=splitNode.SetPtr(insertIndex,tempPtr);
+
+                        b.info.numkeys=lastKeyIndex+1;
                         splitNode.info.numkeys=insertIndex;
 
-                        //    allocate space for newnode on the disk
+                        // allocate space for newnode on the disk
                         rc=AllocateNode(newnode);
                         if (rc) { return rc; }
 
-                        //    serialize newnode and b to the disk
+                        // serialize newnode and b to the disk
                         rc=splitNode.Serialize(buffercache,newnode);
                         if (rc) { return rc; }
                         rc=b.Serialize(buffercache,node);
@@ -846,46 +921,46 @@ ERROR_T BTreeIndex::Display(ostream &o, BTreeDisplayType display_type) const
 
 ERROR_T BTreeIndex::SanityCheck() const
 {
-<<<<<<< HEAD
-    // WRITE ME
-    return ERROR_UNIMPL;
-=======
-  ERROR_T rc;
-  SIZE_T totalKeys;
-  // check if keys in order within node and count up keys in leaf nodes
-  // extended to make sure no node is "too full"
-  rc=NodesInOrder(superblock.info.rootnode, totalKeys);
-  if(rc){
-    return rc;
-  }
-  // if totalkeys in leaf nodes does not match numkeys of superblock, insane tree
-  if (totalKeys != superblock.info.numkeys) {
-	return ERROR_INSANE;
-  }	
->>>>>>> 5982cf243760217219554d455e2442981490dbbe
+    <<<<<<< HEAD
+        // WRITE ME
+        return ERROR_UNIMPL;
+    =======
+        ERROR_T rc;
+    SIZE_T totalKeys;
+    // check if keys in order within node and count up keys in leaf nodes
+    // extended to make sure no node is "too full"
+    rc=NodesInOrder(superblock.info.rootnode, totalKeys);
+    if(rc){
+        return rc;
+    }
+    // if totalkeys in leaf nodes does not match numkeys of superblock, insane tree
+    if (totalKeys != superblock.info.numkeys) {
+        return ERROR_INSANE;
+    }	
+    >>>>>>> 5982cf243760217219554d455e2442981490dbbe
 }
 
 
 // Kind of a misnomer, because we've included multiple insanity check invariants here
 ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) 
 {
-<<<<<<< HEAD
-    // WRITE ME
-    return os;
+    <<<<<<< HEAD
+        // WRITE ME
+        return os;
 }
 =======
-    KEY_T key;
-    SIZE_T ptr;
-    BTreeNode b;
-    totalKeys = 0;
+KEY_T key;
+SIZE_T ptr;
+BTreeNode b;
+totalKeys = 0;
 
-    rc= b.Unserialize(buffercache,node);
-    if(rc) {
-        return rc;
-    }
-    switch(b.info.nodetype){
-        case BTREE_ROOT_NODE:
-        case BTREE_INTERIOR_NODE:
+rc= b.Unserialize(buffercache,node);
+if(rc) {
+    return rc;
+}
+switch(b.info.nodetype){
+    case BTREE_ROOT_NODE:
+    case BTREE_INTERIOR_NODE:
         if (floor(b.info.GetNumSlotsAsInterior*(2/3)) <= b.info.numkeys) {
             // Node is too big
             return ERROR_INSANE;
@@ -905,10 +980,10 @@ ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys)
                         return ERROR_INSANE;
                     }
                 }
->>>>>>> 5982cf243760217219554d455e2442981490dbbe
+                >>>>>>> 5982cf243760217219554d455e2442981490dbbe
 
-                // Recurse down to check the next nodes
-                rc=b.GetPtr(offset,ptr);
+                    // Recurse down to check the next nodes
+                    rc=b.GetPtr(offset,ptr);
                 if (rc) { return rc; }
                 rc=NodesInOrder(ptr);
                 if (rc) { return rc; }
@@ -916,18 +991,18 @@ ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys)
         }
         return ERROR_NOERROR;
         break;
-        case BTREE_LEAF_NODE:
+    case BTREE_LEAF_NODE:
         if (floor(b.info.GetNumSlotsAsLeaf*(2/3)) <= b.info.numkeys){
             // Node is too big
             return ERROR_INSANE;
         }
         if (b.info.numkeys>0) { 
-	    // keep track of the total number of keys
-	       totalKeys += b.info.numkeys;
+            // keep track of the total number of keys
+            totalKeys += b.info.numkeys;
             KEY_T prev = NULL;
             for (offset=0;offset<=b.info.numkeys;offset++) { 
                 rc=b.GetKey(offset,key);
-		        if ( rc ) { return rc; } 
+                if ( rc ) { return rc; } 
                 if(prev==NULL){
                     prev = key;
                 } else {
@@ -940,12 +1015,12 @@ ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys)
                 }
             }
         }
-	    return ERROR_NOERROR
-        break;
-        default:
-	// should never get here
+        return ERROR_NOERROR
+            break;
+    default:
+        // should never get here
         return ERROR_NOERROR;
-    }
+}
 }
 
 
