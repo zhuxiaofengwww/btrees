@@ -914,6 +914,7 @@ ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) const
     return ERROR_NOERROR;
     KEY_T key;
     SIZE_T ptr;
+    KEY_T prev;
     SIZE_T offset;
     int first=1;
     ERROR_T rc;
@@ -932,13 +933,12 @@ ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) const
                 return ERROR_INSANE;
             }
             if (b.info.numkeys>0) { 
-                KEY_T prev=(KEY_T)0;
                 for (offset=0;offset<=b.info.numkeys;offset++) {
 
                     // Recurse down to check the next nodes
                     rc=b.GetPtr(offset,ptr);
                     if (rc) { return rc; }
-                    rc=NodesInOrder(ptr);
+                    rc=NodesInOrder(ptr,totalKeys);
                     if (rc) { return rc; }
                 }
             }
@@ -952,7 +952,6 @@ ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) const
             if (b.info.numkeys>0) { 
                 // keep track of the total number of keys
                 totalKeys += b.info.numkeys;
-                KEY_T prev = NULL;
                 for (offset=0;offset<=b.info.numkeys;offset++) { 
                     rc=b.GetKey(offset,key);
                     if ( rc ) { return rc; } 
@@ -960,7 +959,7 @@ ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) const
                         prev = key;
                         first = 0;
                     } else {
-                        if(key>=prev){
+                        if(prev<key || prev==key){
                             prev=key;
                         }else{
                             //This value is less than the one before it. Uh oh.
@@ -969,8 +968,8 @@ ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) const
                     }
                 }
             }
-            return ERROR_NOERROR
-                break;
+            return ERROR_NOERROR;
+            break;
         default:
             // should never get here
             return ERROR_NOERROR;
