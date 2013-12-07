@@ -476,9 +476,12 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                         SIZE_T tempPtrCurrent;
                         rc=b.GetPtr(offset,tempPtrCurrent);
                         if (rc) { return rc; }
+                        
+                        // increment number of keys
+                        b.info.numkeys+=1;
 
                         // iterate through and move all keys and ptrs over by one
-                        for (SIZE_T i=offset;i<b.info.numkeys;i++) {
+                        for (SIZE_T i=offset;i<b.info.numkeys-1;i++) {
                             rc=b.SetKey(i,tempKeyPrev);
                             if (rc) { return rc; }
                             rc=b.SetPtr(i,tempPtrPrev);
@@ -489,10 +492,7 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                             if (rc) { return rc; }
                             rc=b.GetPtr(i+1,tempPtrCurrent);
                             if (rc) { return rc; }
-                        }
-
-                        // increment number of keys
-                        b.info.numkeys+=1;
+                        } 
 
                         // edge case where we don't want to get next key and ptr
                         // just set the key and ptr of last position in b 
