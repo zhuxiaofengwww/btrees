@@ -357,7 +357,7 @@ ERROR_T BTreeIndex::Lookup(const KEY_T &key, VALUE_T &value)
 
 ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 {
-    SIZE_T newnode;
+    SIZE_T newnode=(SIZE_T)0;
     KEY_T newkey;
     ERROR_T rc;
 
@@ -366,7 +366,6 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 
     // case where we need to add a new root node
     if (newnode) {
-        return ERROR_INSANE;
         BTreeNode oldRoot;
         rc=oldRoot.Unserialize(buffercache,superblock.info.rootnode);
         if (rc) { return rc; }
@@ -554,7 +553,7 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                             // so we need to reset newnode to the null pointer
                             // so the parent caller knows that no newnode was
                             // created at this level
-                            newnode=NULL;
+                            newnode=(SIZE_T)0;
                         }
                         return ERROR_NOERROR;   
                     }
@@ -633,7 +632,7 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                         // so we need to reset newnode to the null pointer
                         // so the parent caller knows that no newnode was
                         // created at this level
-                        newnode=NULL;
+                        newnode=(SIZE_T)0;
                     }
                     // this is the end of the case where child returns a newnode
                     return ERROR_NOERROR;
@@ -665,9 +664,12 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                     VALUE_T tempValueCurrent;
                     rc=b.GetVal(offset,tempValueCurrent);
                     if (rc) { return rc; }
+                    
+                    // increment number of keys
+                    b.info.numkeys+=1;
 
                     // iterate through and move all keys and values over by one
-                    for (SIZE_T i=offset;i<b.info.numkeys;i++) {
+                    for (SIZE_T i=offset;i<b.info.numkeys-1;i++) {
                         rc=b.SetKey(i,tempKeyPrev);
                         if (rc) { return rc; }
                         rc=b.SetVal(i,tempValuePrev);
@@ -680,14 +682,11 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                         if (rc) { return rc; }
                     }
 
-                    // increment number of keys
-                    b.info.numkeys+=1;
-
                     // edge case where we don't want to get next key and val
                     // just set the key and val of last position in b 
-                    rc=b.SetKey(b.info.numkeys-1,tempKeyCurrent);
+                    rc=b.SetKey(b.info.numkeys-1,tempKeyPrev);
                     if (rc) { return rc; }
-                    rc=b.SetVal(b.info.numkeys-1,tempValueCurrent);
+                    rc=b.SetVal(b.info.numkeys-1,tempValuePrev);
                     if (rc) { return rc; }
                     rc=b.Serialize(buffercache,node);
                     if (rc) { return rc; }
