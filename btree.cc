@@ -504,12 +504,12 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                         if (rc) { return rc; }
 
                         // if the node is now too full, split and return the new node
-                        if (floor(b.info.GetNumSlotsAsInterior()*(2/3)) <= b.info.numkeys) {
+                        if ((int)(b.info.GetNumSlotsAsInterior()*(2./3.)) <= b.info.numkeys) {
                             //    copy b into splitNode
                             BTreeNode splitNode = b;
 
                             // last key of first node
-                            SIZE_T lastKeyIndex=floor(b.info.numkeys/2)-1;
+                            SIZE_T lastKeyIndex= (SIZE_T)(int)(b.info.numkeys/2)-1;
                             // first key of new split node
                             SIZE_T firstKeyIndex=lastKeyIndex+2;
 
@@ -583,12 +583,12 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                     rc=b.Serialize(buffercache,node);
                     if (rc) { return rc; } 
                     // if now too full, split and return the new node
-                    if (floor(b.info.GetNumSlotsAsInterior()*(2/3)) <= b.info.numkeys) {
+                    if ((int)(b.info.GetNumSlotsAsInterior()*(2./3.)) <= b.info.numkeys) {
                         //    copy b into splitNode
                         BTreeNode splitNode = b;
 
                         // last key of first node
-                        SIZE_T lastKeyIndex= floor(b.info.numkeys/2)-1;
+                        SIZE_T lastKeyIndex= (SIZE_T)(int)(b.info.numkeys/2)-1;
                         // first key of new split node
                         SIZE_T firstKeyIndex=lastKeyIndex+2;
 
@@ -692,11 +692,11 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                     if (rc) { return rc; }
                     // if the node is now too big, split using recursion and return the new node
                     // otherwise just return 0
-                    if (floor(b.info.GetNumSlotsAsLeaf()*(2/3)) <= b.info.numkeys) {
+                    if ((int)(b.info.GetNumSlotsAsLeaf()*(2./3.)) <= b.info.numkeys) {
                         // copy b into splitNode
                         BTreeNode splitNode = b;
 
-                        SIZE_T halfIndex= floor(b.info.numkeys/2);
+                        SIZE_T halfIndex= (SIZE_T)(int)(b.info.numkeys/2);
                         rc=b.GetKey(halfIndex,newkey);
                         if (rc) { return rc; }
 
@@ -747,11 +747,11 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
             if (rc) { return rc; }
 
             // if the node is too big, split using recursion, then return the new node
-            if (floor(b.info.GetNumSlotsAsLeaf()*(2/3)) <= b.info.numkeys) {
+            if ((int)(b.info.GetNumSlotsAsLeaf()*(2./3.)) <= b.info.numkeys) {
                 // copy b into splitNode
                 BTreeNode splitNode = b;
 
-                SIZE_T halfIndex= floor(b.info.numkeys/2);
+                SIZE_T halfIndex= (SIZE_T)(int)(b.info.numkeys/2);
                 rc=b.GetKey(halfIndex,newkey);
                 if (rc) { return rc; }
 
