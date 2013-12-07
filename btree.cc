@@ -915,6 +915,7 @@ ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) const
     KEY_T key;
     SIZE_T ptr;
     SIZE_T offset;
+    int first=1;
     ERROR_T rc;
     BTreeNode b;
     totalKeys = 0;
@@ -932,19 +933,7 @@ ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) const
             }
             if (b.info.numkeys>0) { 
                 KEY_T prev=(KEY_T)0;
-                for (offset=0;offset<=b.info.numkeys;offset++) { 
-
-                    rc=b.GetKey(offset,key);
-                    if(prev==(KEY_T)0){
-                        prev = key;
-                    } else {
-                        if(key>=prev){
-                            prev=key;
-                        }else{
-                            //This value is less than the one before it. Uh oh.
-                            return ERROR_INSANE;
-                        }
-                    }
+                for (offset=0;offset<=b.info.numkeys;offset++) {
 
                     // Recurse down to check the next nodes
                     rc=b.GetPtr(offset,ptr);
@@ -967,8 +956,9 @@ ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) const
                 for (offset=0;offset<=b.info.numkeys;offset++) { 
                     rc=b.GetKey(offset,key);
                     if ( rc ) { return rc; } 
-                    if(prev==NULL){
+                    if(first==1){
                         prev = key;
+                        first = 0;
                     } else {
                         if(key>=prev){
                             prev=key;
