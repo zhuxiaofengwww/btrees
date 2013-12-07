@@ -369,11 +369,9 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
         BTreeNode oldRoot;
         rc=oldRoot.Unserialize(buffercache,superblock.info.rootnode);
         if (rc) { return rc; }
-        BTreeNode newRoot;
-        newRoot.info = oldRoot.info;
+        BTreeNode newRoot=oldRoot;
 
-        rc=newRoot.info.numkeys=1;
-        if (rc) { return rc; }
+        newRoot.info.numkeys=1;
         rc=newRoot.SetKey(0,newkey);
         if (rc) { return rc; }
         rc=newRoot.SetPtr(0,superblock.info.rootnode);
@@ -385,6 +383,9 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
         SIZE_T newRootBlock;
         rc=AllocateNode(newRootBlock);
         if (rc) { return rc; }
+
+        // update superblock to point to new root
+        superblock.info.rootnode=newRootBlock;
 
         // serialize newRoot to the disk
         rc=newRoot.Serialize(buffercache,newRootBlock);
@@ -474,7 +475,7 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                         SIZE_T tempPtrPrev=newnode;
                         KEY_T tempKeyCurrent=testkey; 
                         SIZE_T tempPtrCurrent;
-                        rc=b.GetPtr(offset,tempPtrCurrent);
+                        rc=b.GetPtr(offset+1,tempPtrCurrent);
                         if (rc) { return rc; }
                         
                         // increment number of keys
@@ -484,21 +485,20 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                         for (SIZE_T i=offset;i<b.info.numkeys-1;i++) {
                             rc=b.SetKey(i,tempKeyPrev);
                             if (rc) { return rc; }
-                            rc=b.SetPtr(i,tempPtrPrev);
+                            rc=b.SetPtr(i+1,tempPtrPrev);
                             if (rc) { return rc; }
                             tempKeyPrev=tempKeyCurrent;
                             tempPtrPrev=tempPtrCurrent;
                             rc=b.GetKey(i+1,tempKeyCurrent);
                             if (rc) { return rc; }
-                            rc=b.GetPtr(i+1,tempPtrCurrent);
+                            rc=b.GetPtr(i+2,tempPtrCurrent);
                             if (rc) { return rc; }
                         } 
 
-                        // edge case where we don't want to get next key and ptr
                         // just set the key and ptr of last position in b 
-                        rc=b.SetKey(b.info.numkeys-1,tempKeyCurrent);
+                        rc=b.SetKey(b.info.numkeys-1,tempKeyPrev);
                         if (rc) { return rc; }
-                        rc=b.SetPtr(b.info.numkeys-1,tempPtrCurrent);
+                        rc=b.SetPtr(b.info.numkeys,tempPtrPrev);
                         if (rc) { return rc; }
                         rc=b.Serialize(buffercache,node);
                         if (rc) { return rc; }
@@ -697,7 +697,7 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                         BTreeNode splitNode = b;
 
                         SIZE_T halfIndex= (SIZE_T)(int)(b.info.numkeys/2);
-                        rc=b.GetKey(halfIndex,newkey);
+                        rc=b.GetKey(halfIndex-1,newkey);
                         if (rc) { return rc; }
 
                         // move the second half of the old node into the beginning of newnode
@@ -752,7 +752,7 @@ ERROR_T BTreeIndex::InsertRecursion(const SIZE_T &node, const KEY_T &key, const 
                 BTreeNode splitNode = b;
 
                 SIZE_T halfIndex= (SIZE_T)(int)(b.info.numkeys/2);
-                rc=b.GetKey(halfIndex,newkey);
+                rc=b.GetKey(halfIndex-1,newkey);
                 if (rc) { return rc; }
 
                 // move the second half of the old node into the beginning of newnode
@@ -912,9 +912,9 @@ ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) const
 {
 
     return ERROR_NOERROR;
-    /*
     KEY_T key;
     SIZE_T ptr;
+    SIZE_T offset;
     ERROR_T rc;
     BTreeNode b;
     totalKeys = 0;
@@ -926,16 +926,16 @@ ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) const
     switch(b.info.nodetype){
         case BTREE_ROOT_NODE:
         case BTREE_INTERIOR_NODE:
-            if (floor(b.info.GetNumSlotsAsInterior()*(2/3)) <= b.info.numkeys) {
+            if ((int)(b.info.GetNumSlotsAsInterior()*(2./3.)) <= b.info.numkeys) {
                 // Node is too big
                 return ERROR_INSANE;
             }
             if (b.info.numkeys>0) { 
-                KEY_T prev=0;
+                KEY_T prev=(KEY_T)0;
                 for (offset=0;offset<=b.info.numkeys;offset++) { 
 
                     rc=b.GetKey(offset,key);
-                    if(prev==0){
+                    if(prev==(KEY_T)0){
                         prev = key;
                     } else {
                         if(key>=prev){
@@ -956,7 +956,7 @@ ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) const
             return ERROR_NOERROR;
             break;
         case BTREE_LEAF_NODE:
-            if (floor(b.info.GetNumSlotsAsLeaf()*(2/3)) <= b.info.numkeys){
+            if ((int)(b.info.GetNumSlotsAsLeaf()*(2./3.)) <= b.info.numkeys){
                 // Node is too big
                 return ERROR_INSANE;
             }
@@ -985,7 +985,6 @@ ERROR_T BTreeIndex::NodesInOrder(const SIZE_T &node, SIZE_T &totalKeys) const
             // should never get here
             return ERROR_NOERROR;
     }
-*/
 }
 
 
